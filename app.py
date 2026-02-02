@@ -6,7 +6,14 @@ import os
 import time
 import gzip
 import shutil
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+
+# IST Offset
+IST_OFFSET = timedelta(hours=5, minutes=30)
+IST = timezone(IST_OFFSET)
+
+def get_ist_now():
+    return datetime.now(IST)
 
 # Set page configuration
 st.set_page_config(page_title="Positional Stock Option Scanner", layout="wide")
@@ -123,7 +130,7 @@ def load_token():
         try:
             with open(TOKEN_FILE, 'r') as f:
                 data = json.load(f)
-                if data.get('date') == datetime.now().strftime('%Y-%m-%d'):
+                if data.get('date') == get_ist_now().strftime('%Y-%m-%d'):
                     return data.get('token', '')
         except:
             pass
@@ -132,7 +139,7 @@ def load_token():
 def save_token(token):
     try:
         data = {
-            'date': datetime.now().strftime('%Y-%m-%d'),
+            'date': get_ist_now().strftime('%Y-%m-%d'),
             'token': token
         }
         with open(TOKEN_FILE, 'w') as f:
@@ -145,7 +152,7 @@ def load_blacklist():
         try:
             with open(BLACKLIST_FILE, 'r') as f:
                 data = json.load(f)
-                if data.get('date') == datetime.now().strftime('%Y-%m-%d'):
+                if data.get('date') == get_ist_now().strftime('%Y-%m-%d'):
                     return set(data.get('keys', []))
         except:
             pass
@@ -154,7 +161,7 @@ def load_blacklist():
 def save_blacklist(keys):
     try:
         data = {
-            'date': datetime.now().strftime('%Y-%m-%d'),
+            'date': get_ist_now().strftime('%Y-%m-%d'),
             'keys': list(keys)
         }
         with open(BLACKLIST_FILE, 'w') as f:
@@ -345,7 +352,7 @@ def display_option_chain(df, access_token, key_suffix):
         blacklist = load_blacklist()
         
         # Check time condition (before 09:30)
-        current_time = datetime.now().time()
+        current_time = get_ist_now().time()
         cutoff_time = datetime.strptime("09:30", "%H:%M").time()
         
         if current_time < cutoff_time:
@@ -515,7 +522,7 @@ with st.sidebar:
 
 # --- Main Page ---
 st.title("Positional Stock Option Scanner")
-st.caption(f"Last Updated: {datetime.now().strftime('%H:%M:%S')}")
+st.caption(f"Last Updated: {get_ist_now().strftime('%H:%M:%S')} IST")
 
 nse_json_df = load_nse_json()
 
