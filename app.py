@@ -91,6 +91,7 @@ if not os.path.exists(DATA_DIR):
 BLACKLIST_FILE = os.path.join(DATA_DIR, 'blacklist.json')
 TOKEN_FILE = os.path.join(DATA_DIR, 'token.json')
 META_FILE = os.path.join(DATA_DIR, 'meta.json')
+LTP_CACHE_FILE = os.path.join(DATA_DIR, 'ltp_cache.json')
 
 FILES = {
     'Monthly': os.path.join(DATA_DIR, 'monthly.csv'),
@@ -113,6 +114,24 @@ def save_meta(key, date_str):
         meta[key] = date_str
         with open(META_FILE, 'w') as f:
             json.dump(meta, f)
+    except:
+        pass
+
+def load_ltp_cache():
+    if os.path.exists(LTP_CACHE_FILE):
+        try:
+            with open(LTP_CACHE_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+    return {}
+
+def save_ltp_cache(new_data):
+    try:
+        cache = load_ltp_cache()
+        cache.update(new_data)
+        with open(LTP_CACHE_FILE, 'w') as f:
+            json.dump(cache, f)
     except:
         pass
 
@@ -321,8 +340,45 @@ def display_option_chain(df, access_token, key_suffix):
     # Fetch LTP if token provided
     if access_token:
         all_keys = df['instrument_key'].dropna().unique().tolist()
-        with st.spinner(f'Fetching LTP for {key_suffix}...'):
-            ltp_data = fetch_ltp(all_keys, access_token)
+        
+        # Time-based Fetch Logic
+        ist_now = get_ist_now()
+        current_time = ist_now.time()
+        start_time = datetime.strptime("09:00", "%H:%M").time()
+        end_time = datetime.strptime("15:40", "%H:%M").time()
+        
+        is_market_hours = start_time <= current_time <= end_time
+        
+        # Load Cache
+        ltp_cache = load_ltp_cache()
+        
+        # Identify missing keys
+        missing_keys = [k for k in all_keys if k not in ltp_cache]
+        
+        should_fetch = False
+        fetch_reason = ""
+        
+        if is_market_hours:
+            should_fetch = True
+            fetch_reason = "Live Market Update"
+        elif missing_keys:
+            should_fetch = True
+            fetch_reason = "Populating Missing Data"
+        
+        ltp_data = {}
+        
+        if should_fetch:
+            keys_to_fetch = all_keys if is_market_hours else missing_keys
+            with st.spinner(f'Fetching LTP for {key_suffix} ({fetch_reason})...'):
+                fetched_data = fetch_ltp(keys_to_fetch, access_token)
+                if fetched_data:
+                    save_ltp_cache(fetched_data)
+                    # Reload cache to get complete set
+                    ltp_cache = load_ltp_cache()
+        
+        # Use data from cache
+        ltp_data = {k: ltp_cache.get(k, 0.0) for k in all_keys}
+        
         df['ltp'] = df['instrument_key'].map(ltp_data).fillna(0.0)
     else:
         df['ltp'] = 0.0
@@ -403,7 +459,8 @@ def display_option_chain(df, access_token, key_suffix):
         st.dataframe(
             calls_df[display_cols].style
             .map(color_change, subset=['change %'])
-            .format(format_dict),
+            .format(format_dict)
+            .set_properties(**{'font-weight': 'bold', 'text-align': 'center', 'font-size': '16px'}),
             hide_index=True, 
             use_container_width=True,
             height=1800
@@ -414,7 +471,8 @@ def display_option_chain(df, access_token, key_suffix):
         st.dataframe(
             puts_df[display_cols].style
             .map(color_change, subset=['change %'])
-            .format(format_dict),
+            .format(format_dict)
+            .set_properties(**{'font-weight': 'bold', 'text-align': 'center', 'font-size': '16px'}),
             hide_index=True, 
             use_container_width=True,
             height=1800
