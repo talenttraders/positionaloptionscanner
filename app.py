@@ -74,6 +74,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 import json
+import re
 
 # Paths for persistent storage
 DATA_DIR = 'data'
@@ -82,12 +83,40 @@ if not os.path.exists(DATA_DIR):
 
 BLACKLIST_FILE = os.path.join(DATA_DIR, 'blacklist.json')
 TOKEN_FILE = os.path.join(DATA_DIR, 'token.json')
+META_FILE = os.path.join(DATA_DIR, 'meta.json')
 
 FILES = {
     'Monthly': os.path.join(DATA_DIR, 'monthly.csv'),
     'Weekly': os.path.join(DATA_DIR, 'weekly.csv'),
     'Intraday': os.path.join(DATA_DIR, 'intraday.csv')
 }
+
+def load_meta():
+    if os.path.exists(META_FILE):
+        try:
+            with open(META_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            pass
+    return {}
+
+def save_meta(key, date_str):
+    try:
+        meta = load_meta()
+        meta[key] = date_str
+        with open(META_FILE, 'w') as f:
+            json.dump(meta, f)
+    except:
+        pass
+
+def extract_date_from_filename(filename):
+    # Regex to find 8-digit date like 20260130
+    match = re.search(r'(\d{8})', filename)
+    if match:
+        d = match.group(1)
+        # Format as YYYY-MM-DD
+        return f"{d[:4]}-{d[4:6]}-{d[6:]}"
+    return None
 
 def load_token():
     if os.path.exists(TOKEN_FILE):
@@ -429,7 +458,19 @@ with st.sidebar:
     if up_m is not None:
         with open(FILES['Monthly'], "wb") as f:
             f.write(up_m.getbuffer())
+        # Extract and save date
+        date_str = extract_date_from_filename(up_m.name)
+        if date_str:
+            save_meta('Monthly', date_str)
         st.success("Monthly file updated!")
+    
+    meta = load_meta()
+    if 'Monthly' in meta and os.path.exists(FILES['Monthly']):
+        st.caption(f"📅 Data Date: {meta['Monthly']}")
+    elif os.path.exists(FILES['Monthly']):
+        # Fallback to file time if no meta date
+        m_time = os.path.getmtime(FILES['Monthly'])
+        st.caption(f"📅 Last Updated: {datetime.fromtimestamp(m_time).strftime('%Y-%m-%d %H:%M')}")
     
     # Weekly Uploader
     st.subheader("Weekly")
@@ -437,7 +478,17 @@ with st.sidebar:
     if up_w is not None:
         with open(FILES['Weekly'], "wb") as f:
             f.write(up_w.getbuffer())
+        # Extract and save date
+        date_str = extract_date_from_filename(up_w.name)
+        if date_str:
+            save_meta('Weekly', date_str)
         st.success("Weekly file updated!")
+
+    if 'Weekly' in meta and os.path.exists(FILES['Weekly']):
+        st.caption(f"📅 Data Date: {meta['Weekly']}")
+    elif os.path.exists(FILES['Weekly']):
+        w_time = os.path.getmtime(FILES['Weekly'])
+        st.caption(f"📅 Last Updated: {datetime.fromtimestamp(w_time).strftime('%Y-%m-%d %H:%M')}")
     
     # Intraday Uploader
     st.subheader("Intraday")
@@ -445,7 +496,17 @@ with st.sidebar:
     if up_i is not None:
         with open(FILES['Intraday'], "wb") as f:
             f.write(up_i.getbuffer())
+        # Extract and save date
+        date_str = extract_date_from_filename(up_i.name)
+        if date_str:
+            save_meta('Intraday', date_str)
         st.success("Intraday file updated!")
+    
+    if 'Intraday' in meta and os.path.exists(FILES['Intraday']):
+        st.caption(f"📅 Data Date: {meta['Intraday']}")
+    elif os.path.exists(FILES['Intraday']):
+        i_time = os.path.getmtime(FILES['Intraday'])
+        st.caption(f"📅 Last Updated: {datetime.fromtimestamp(i_time).strftime('%Y-%m-%d %H:%M')}")
         
     st.markdown("---")
     st.header("Auto Refresh")
