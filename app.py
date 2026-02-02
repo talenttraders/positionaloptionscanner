@@ -4,6 +4,8 @@ import requests
 import math
 import os
 import time
+import gzip
+import shutil
 from datetime import datetime
 
 # Set page configuration
@@ -398,12 +400,28 @@ with st.sidebar:
     
     # NSE JSON Uploader
     st.subheader("NSE Instrument JSON")
-    up_json = st.file_uploader("Upload NSE.json", type=['json'], key='json_up')
-    if up_json is not None:
-        with open(NSE_JSON_PATH, "wb") as f:
-            f.write(up_json.getbuffer())
-        st.cache_data.clear()
-        st.success("NSE.json updated and cache cleared!")
+    
+    if st.button("🔄 Download Latest"):
+        try:
+            with st.spinner("Downloading latest NSE.json from Upstox..."):
+                url = "https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz"
+                headers = {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+                }
+                response = requests.get(url, headers=headers, stream=True)
+                if response.status_code == 200:
+                    with open(NSE_JSON_PATH, "wb") as f_out:
+                        with gzip.GzipFile(fileobj=response.raw) as f_in:
+                            shutil.copyfileobj(f_in, f_out)
+                    st.cache_data.clear()
+                    st.success("Updated successfully!")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error(f"Failed to download. Status: {response.status_code}")
+        except Exception as e:
+            st.error(f"Error: {e}")
+
     
     # Monthly Uploader
     st.subheader("Monthly")
