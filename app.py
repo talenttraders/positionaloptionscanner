@@ -346,30 +346,30 @@ def display_option_chain(df, access_token, key_suffix):
     df['change_val'] = df.apply(calculate_numeric_change, axis=1)
     df['change %'] = df['change_val']
 
-    # --- Intraday Blacklist Logic Removed (User Request) ---
-    # if key_suffix == 'Intraday':
-    #     # Load existing blacklist
-    #     blacklist = load_blacklist()
-    #     
-    #     # Check time condition (before 09:30)
-    #     current_time = get_ist_now().time()
-    #     cutoff_time = datetime.strptime("09:30", "%H:%M").time()
-    #     
-    #     if current_time < cutoff_time:
-    #         # Identify new violators
-    #         violators = df[df['change %'] >= 100]['instrument_key'].tolist()
-    #         if violators:
-    #             blacklist.update(violators)
-    #             save_blacklist(blacklist)
-    #     
-    #     # Filter out blacklisted keys
-    #     if blacklist:
-    #         original_count = len(df)
-    #         df = df[~df['instrument_key'].isin(blacklist)]
-    #         filtered_count = len(df)
-    #         diff = original_count - filtered_count
-    #         # if diff > 0:
-    #         #     st.caption(f"ℹ️ {diff} symbols hidden (Change % >= 100 before 09:30)")
+    # --- Intraday Blacklist Logic ---
+    if key_suffix == 'Intraday':
+        # Load existing blacklist
+        blacklist = load_blacklist()
+        
+        # Check time condition (before 09:30)
+        current_time = get_ist_now().time()
+        cutoff_time = datetime.strptime("09:30", "%H:%M").time()
+        
+        if current_time < cutoff_time:
+            # Identify new violators
+            violators = df[df['change %'] >= 100]['instrument_key'].tolist()
+            if violators:
+                blacklist.update(violators)
+                save_blacklist(blacklist)
+        
+        # Filter out blacklisted keys
+        if blacklist:
+            original_count = len(df)
+            df = df[~df['instrument_key'].isin(blacklist)]
+            filtered_count = len(df)
+            diff = original_count - filtered_count
+            # if diff > 0:
+            #     st.caption(f"ℹ️ {diff} symbols hidden (Change % >= 100 before 09:30)")
 
     # Split Calls/Puts
     calls_df = df[df['OptionType'] == 'CE'].copy()
