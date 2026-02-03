@@ -7,6 +7,7 @@ import time
 import gzip
 import shutil
 from datetime import datetime, timedelta, timezone
+import concurrent.futures
 
 # IST Offset
 IST_OFFSET = timedelta(hours=5, minutes=30)
@@ -319,22 +320,35 @@ def fetch_ltp(instrument_keys, token):
     
     batches = [instrument_keys[i:i + batch_size] for i in range(0, len(instrument_keys), batch_size)]
     
-    for batch in batches:
+    def fetch_batch(batch):
         params = {'instrument_key': ','.join(batch)}
         try:
-            response = requests.get(url, headers=headers, params=params)
+            response = requests.get(url, headers=headers, params=params, timeout=10)
             if response.status_code == 200:
                 data = response.json()
                 if data.get('status') == 'success':
                     quotes = data.get('data', {})
+                    result = {}
                     for key, details in quotes.items():
                         inst_token = details.get('instrument_token')
                         last_price = details.get('last_price')
-                        if inst_token:
-                            ltp_map[inst_token] = last_price
+                        if inst_token is not None:
+                            result[inst_token] = last_price
+                    return result
         except Exception:
             pass
-            
+        return {}
+    
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        futures = [executor.submit(fetch_batch, batch) for batch in batches]
+        for future in concurrent.futures.as_completed(futures):
+            try:
+                batch_result = future.result()
+                if batch_result:
+                    ltp_map.update(batch_result)
+            except Exception:
+                pass
+    
     return ltp_map
 
 def display_option_chain(df, access_token, key_suffix):
