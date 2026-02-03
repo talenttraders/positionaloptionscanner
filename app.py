@@ -144,6 +144,22 @@ def extract_date_from_filename(filename):
         return f"{d[:4]}-{d[4:6]}-{d[6:]}"
     return None
 
+def get_file_date_info(key):
+    path = FILES.get(key)
+    if not path or not os.path.exists(path):
+        return None
+        
+    meta = load_meta()
+    if key in meta:
+        return meta[key]
+    
+    # Fallback to file modification time
+    try:
+        m_time = os.path.getmtime(path)
+        return datetime.fromtimestamp(m_time).strftime('%Y-%m-%d')
+    except:
+        return "Unknown"
+
 def load_token():
     if os.path.exists(TOKEN_FILE):
         try:
@@ -519,7 +535,15 @@ with st.sidebar:
     
     # Monthly Uploader
     st.subheader("Monthly")
-    up_m = st.file_uploader("Upload Monthly Bhavcopy", type=['csv'], key='m_up')
+    m_date = get_file_date_info('Monthly')
+    if m_date:
+        st.success(f"✅ Loaded ({m_date})")
+        m_label = "Update Monthly Bhavcopy"
+    else:
+        st.warning("⚠️ Data Missing")
+        m_label = "Upload Monthly Bhavcopy"
+
+    up_m = st.file_uploader(m_label, type=['csv'], key='m_up')
     if up_m is not None:
         with open(FILES['Monthly'], "wb") as f:
             f.write(up_m.getbuffer())
@@ -528,18 +552,20 @@ with st.sidebar:
         if date_str:
             save_meta('Monthly', date_str)
         st.success("Monthly file updated!")
-    
-    meta = load_meta()
-    if 'Monthly' in meta and os.path.exists(FILES['Monthly']):
-        st.caption(f"📅 Data Date: {meta['Monthly']}")
-    elif os.path.exists(FILES['Monthly']):
-        # Fallback to file time if no meta date
-        m_time = os.path.getmtime(FILES['Monthly'])
-        st.caption(f"📅 Last Updated: {datetime.fromtimestamp(m_time).strftime('%Y-%m-%d %H:%M')}")
+        time.sleep(1)
+        st.rerun()
     
     # Weekly Uploader
     st.subheader("Weekly")
-    up_w = st.file_uploader("Upload Weekly Bhavcopy", type=['csv'], key='w_up')
+    w_date = get_file_date_info('Weekly')
+    if w_date:
+        st.success(f"✅ Loaded ({w_date})")
+        w_label = "Update Weekly Bhavcopy"
+    else:
+        st.warning("⚠️ Data Missing")
+        w_label = "Upload Weekly Bhavcopy"
+
+    up_w = st.file_uploader(w_label, type=['csv'], key='w_up')
     if up_w is not None:
         with open(FILES['Weekly'], "wb") as f:
             f.write(up_w.getbuffer())
@@ -548,16 +574,20 @@ with st.sidebar:
         if date_str:
             save_meta('Weekly', date_str)
         st.success("Weekly file updated!")
-
-    if 'Weekly' in meta and os.path.exists(FILES['Weekly']):
-        st.caption(f"📅 Data Date: {meta['Weekly']}")
-    elif os.path.exists(FILES['Weekly']):
-        w_time = os.path.getmtime(FILES['Weekly'])
-        st.caption(f"📅 Last Updated: {datetime.fromtimestamp(w_time).strftime('%Y-%m-%d %H:%M')}")
+        time.sleep(1)
+        st.rerun()
     
     # Intraday Uploader
     st.subheader("Intraday")
-    up_i = st.file_uploader("Upload Intraday Bhavcopy", type=['csv'], key='i_up')
+    i_date = get_file_date_info('Intraday')
+    if i_date:
+        st.success(f"✅ Loaded ({i_date})")
+        i_label = "Update Intraday Bhavcopy"
+    else:
+        st.warning("⚠️ Data Missing")
+        i_label = "Upload Intraday Bhavcopy"
+
+    up_i = st.file_uploader(i_label, type=['csv'], key='i_up')
     if up_i is not None:
         with open(FILES['Intraday'], "wb") as f:
             f.write(up_i.getbuffer())
@@ -566,12 +596,8 @@ with st.sidebar:
         if date_str:
             save_meta('Intraday', date_str)
         st.success("Intraday file updated!")
-    
-    if 'Intraday' in meta and os.path.exists(FILES['Intraday']):
-        st.caption(f"📅 Data Date: {meta['Intraday']}")
-    elif os.path.exists(FILES['Intraday']):
-        i_time = os.path.getmtime(FILES['Intraday'])
-        st.caption(f"📅 Last Updated: {datetime.fromtimestamp(i_time).strftime('%Y-%m-%d %H:%M')}")
+        time.sleep(1)
+        st.rerun()
         
     st.markdown("---")
     st.header("Auto Refresh")
