@@ -352,6 +352,7 @@ def fetch_ltp(instrument_keys, token):
     return ltp_map
 
 def display_option_chain(df, access_token, key_suffix):
+    st.caption(f"Last Updated: {get_ist_now().strftime('%H:%M:%S')} IST")
     if df.empty:
         st.info("No data to display. Please upload a valid Bhavcopy in the sidebar.")
         return
@@ -599,7 +600,7 @@ with st.sidebar:
 
 # --- Main Page ---
 st.title("Positional Stock Option Scanner")
-st.caption(f"Last Updated: {get_ist_now().strftime('%H:%M:%S')} IST")
+# st.caption(f"Last Updated: {get_ist_now().strftime('%H:%M:%S')} IST")
 
 nse_json_df = load_nse_json()
 
