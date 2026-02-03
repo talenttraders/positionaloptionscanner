@@ -1,6 +1,24 @@
+# Python
 __pycache__/
 *.pyc
-.DS_Store
-data/
+*.pyo
+*.pyd
+.Python
+env/
 venv/
 .env
+
+# Data
+data/
+NSE.json
+*.csv
+*.gz
+*.zip
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
