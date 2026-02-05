@@ -6,8 +6,8 @@ import os
 import time
 import gzip
 import shutil
-from datetime import datetime, timedelta, timezone
 import concurrent.futures
+from datetime import datetime, timedelta, timezone
 
 # IST Offset
 IST_OFFSET = timedelta(hours=5, minutes=30)
@@ -69,7 +69,15 @@ st.markdown("""
         [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
             opacity: 1 !important;
             transition: none !important;
+            filter: none !important;
         }
+        
+        /* Disable interaction blocking overlay */
+        .st-emotion-cache-1wmy9hl {
+            opacity: 1 !important;
+        }
+        
+        /* Hide the running man animation if desired, but keep simple for now */
         
         /* Hide File Uploader Instructions */
         [data-testid="stFileUploaderDropzone"] div div span {
@@ -77,11 +85,6 @@ st.markdown("""
         }
         [data-testid="stFileUploaderDropzone"] div div small {
            display: none !important;
-        }
-        
-        /* Force Dataframe Font Weight */
-        div[data-testid="stDataFrame"] {
-            font-weight: 600 !important;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -149,6 +152,22 @@ def extract_date_from_filename(filename):
         # Format as YYYY-MM-DD
         return f"{d[:4]}-{d[4:6]}-{d[6:]}"
     return None
+
+def get_file_date_info(key):
+    path = FILES.get(key)
+    if not path or not os.path.exists(path):
+        return None
+        
+    meta = load_meta()
+    if key in meta:
+        return meta[key]
+    
+    # Fallback to file modification time
+    try:
+        m_time = os.path.getmtime(path)
+        return datetime.fromtimestamp(m_time).strftime('%Y-%m-%d')
+    except:
+        return "Unknown"
 
 def load_token():
     if os.path.exists(TOKEN_FILE):
@@ -315,7 +334,7 @@ def fetch_ltp(instrument_keys, token):
         'Authorization': f'Bearer {token}'
     }
     
-    batch_size = 50
+    batch_size = 50 # Upstox allows up to 100, but 50 is safer
     ltp_map = {}
     
     batches = [instrument_keys[i:i + batch_size] for i in range(0, len(instrument_keys), batch_size)]
@@ -323,36 +342,35 @@ def fetch_ltp(instrument_keys, token):
     def fetch_batch(batch):
         params = {'instrument_key': ','.join(batch)}
         try:
-            response = requests.get(url, headers=headers, params=params, timeout=10)
+            response = requests.get(url, headers=headers, params=params, timeout=5)
             if response.status_code == 200:
                 data = response.json()
                 if data.get('status') == 'success':
-                    quotes = data.get('data', {})
-                    result = {}
-                    for key, details in quotes.items():
-                        inst_token = details.get('instrument_token')
-                        last_price = details.get('last_price')
-                        if inst_token is not None:
-                            result[inst_token] = last_price
-                    return result
-        except Exception:
+                    return data.get('data', {})
+        except Exception as e:
+            # print(f"Error fetching batch: {e}")
             pass
         return {}
-    
+
+    # Use ThreadPoolExecutor for parallel requests
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-        futures = [executor.submit(fetch_batch, batch) for batch in batches]
-        for future in concurrent.futures.as_completed(futures):
+        future_to_batch = {executor.submit(fetch_batch, batch): batch for batch in batches}
+        
+        for future in concurrent.futures.as_completed(future_to_batch):
             try:
-                batch_result = future.result()
-                if batch_result:
-                    ltp_map.update(batch_result)
-            except Exception:
+                batch_data = future.result()
+                if batch_data:
+                    for key, details in batch_data.items():
+                        inst_token = details.get('instrument_token')
+                        last_price = details.get('last_price')
+                        if inst_token:
+                            ltp_map[inst_token] = last_price
+            except Exception as e:
                 pass
-    
+            
     return ltp_map
 
 def display_option_chain(df, access_token, key_suffix):
-    st.caption(f"Last Updated: {get_ist_now().strftime('%H:%M:%S')} IST")
     if df.empty:
         st.info("No data to display. Please upload a valid Bhavcopy in the sidebar.")
         return
@@ -389,7 +407,7 @@ def display_option_chain(df, access_token, key_suffix):
         
         if should_fetch:
             keys_to_fetch = all_keys if is_market_hours else missing_keys
-            # Fetch silently
+            # Silent fetch - no spinner
             fetched_data = fetch_ltp(keys_to_fetch, access_token)
             if fetched_data:
                 save_ltp_cache(fetched_data)
@@ -480,7 +498,7 @@ def display_option_chain(df, access_token, key_suffix):
             calls_df[display_cols].style
             .map(color_change, subset=['change %'])
             .format(format_dict)
-            .set_properties(**{'font-weight': '600', 'text-align': 'center', 'font-size': '16px'}),
+            .set_properties(**{'font-weight': 'bold', 'text-align': 'center', 'font-size': '16px'}),
             hide_index=True, 
             use_container_width=True,
             height=1800
@@ -492,7 +510,7 @@ def display_option_chain(df, access_token, key_suffix):
             puts_df[display_cols].style
             .map(color_change, subset=['change %'])
             .format(format_dict)
-            .set_properties(**{'font-weight': '600', 'text-align': 'center', 'font-size': '16px'}),
+            .set_properties(**{'font-weight': 'bold', 'text-align': 'center', 'font-size': '16px'}),
             hide_index=True, 
             use_container_width=True,
             height=1800
@@ -538,8 +556,16 @@ with st.sidebar:
 
     
     # Monthly Uploader
-    st.subheader("Monthly")
-    up_m = st.file_uploader("Upload Monthly Bhavcopy", type=['csv'], key='m_up')
+    st.subheader("Monthly (Update 1x/Month)")
+    m_date = get_file_date_info('Monthly')
+    if m_date:
+        st.success(f"✅ Loaded ({m_date})")
+        m_label = "Update Monthly Bhavcopy"
+    else:
+        st.warning("⚠️ Data Missing")
+        m_label = "Upload Monthly Bhavcopy"
+
+    up_m = st.file_uploader(m_label, type=['csv'], key='m_up')
     if up_m is not None:
         with open(FILES['Monthly'], "wb") as f:
             f.write(up_m.getbuffer())
@@ -548,18 +574,20 @@ with st.sidebar:
         if date_str:
             save_meta('Monthly', date_str)
         st.success("Monthly file updated!")
-    
-    meta = load_meta()
-    if 'Monthly' in meta and os.path.exists(FILES['Monthly']):
-        st.caption(f"📅 Data Date: {meta['Monthly']}")
-    elif os.path.exists(FILES['Monthly']):
-        # Fallback to file time if no meta date
-        m_time = os.path.getmtime(FILES['Monthly'])
-        st.caption(f"📅 Last Updated: {datetime.fromtimestamp(m_time).strftime('%Y-%m-%d %H:%M')}")
+        time.sleep(1)
+        st.rerun()
     
     # Weekly Uploader
-    st.subheader("Weekly")
-    up_w = st.file_uploader("Upload Weekly Bhavcopy", type=['csv'], key='w_up')
+    st.subheader("Weekly (Update 1x/Week)")
+    w_date = get_file_date_info('Weekly')
+    if w_date:
+        st.success(f"✅ Loaded ({w_date})")
+        w_label = "Update Weekly Bhavcopy"
+    else:
+        st.warning("⚠️ Data Missing")
+        w_label = "Upload Weekly Bhavcopy"
+
+    up_w = st.file_uploader(w_label, type=['csv'], key='w_up')
     if up_w is not None:
         with open(FILES['Weekly'], "wb") as f:
             f.write(up_w.getbuffer())
@@ -568,16 +596,20 @@ with st.sidebar:
         if date_str:
             save_meta('Weekly', date_str)
         st.success("Weekly file updated!")
-
-    if 'Weekly' in meta and os.path.exists(FILES['Weekly']):
-        st.caption(f"📅 Data Date: {meta['Weekly']}")
-    elif os.path.exists(FILES['Weekly']):
-        w_time = os.path.getmtime(FILES['Weekly'])
-        st.caption(f"📅 Last Updated: {datetime.fromtimestamp(w_time).strftime('%Y-%m-%d %H:%M')}")
+        time.sleep(1)
+        st.rerun()
     
     # Intraday Uploader
-    st.subheader("Intraday")
-    up_i = st.file_uploader("Upload Intraday Bhavcopy", type=['csv'], key='i_up')
+    st.subheader("Intraday (Update Daily)")
+    i_date = get_file_date_info('Intraday')
+    if i_date:
+        st.success(f"✅ Loaded ({i_date})")
+        i_label = "Update Intraday Bhavcopy"
+    else:
+        st.warning("⚠️ Data Missing")
+        i_label = "Upload Intraday Bhavcopy"
+
+    up_i = st.file_uploader(i_label, type=['csv'], key='i_up')
     if up_i is not None:
         with open(FILES['Intraday'], "wb") as f:
             f.write(up_i.getbuffer())
@@ -586,12 +618,8 @@ with st.sidebar:
         if date_str:
             save_meta('Intraday', date_str)
         st.success("Intraday file updated!")
-    
-    if 'Intraday' in meta and os.path.exists(FILES['Intraday']):
-        st.caption(f"📅 Data Date: {meta['Intraday']}")
-    elif os.path.exists(FILES['Intraday']):
-        i_time = os.path.getmtime(FILES['Intraday'])
-        st.caption(f"📅 Last Updated: {datetime.fromtimestamp(i_time).strftime('%Y-%m-%d %H:%M')}")
+        time.sleep(1)
+        st.rerun()
         
     st.markdown("---")
     st.header("Auto Refresh")
@@ -600,47 +628,41 @@ with st.sidebar:
 
 # --- Main Page ---
 st.title("Positional Stock Option Scanner")
-# st.caption(f"Last Updated: {get_ist_now().strftime('%H:%M:%S')} IST")
+st.caption(f"Last Updated: {get_ist_now().strftime('%H:%M:%S')} IST")
 
 nse_json_df = load_nse_json()
 
 if not nse_json_df.empty:
     tab1, tab2, tab3 = st.tabs(["Monthly", "Weekly", "Intraday"])
-    
-    run_every = refresh_interval if auto_refresh else None
 
     with tab1:
         st.header("Monthly Options")
         if os.path.exists(FILES['Monthly']):
-            @st.fragment(run_every=run_every)
-            def show_monthly():
-                df_m = process_bhavcopy(FILES['Monthly'], nse_json_df)
-                display_option_chain(df_m, access_token, "Monthly")
-            show_monthly()
+            df_m = process_bhavcopy(FILES['Monthly'], nse_json_df)
+            display_option_chain(df_m, access_token, "Monthly")
         else:
             st.info("Please upload a Monthly Bhavcopy in the sidebar to view data.")
 
     with tab2:
         st.header("Weekly Options")
         if os.path.exists(FILES['Weekly']):
-            @st.fragment(run_every=run_every)
-            def show_weekly():
-                df_w = process_bhavcopy(FILES['Weekly'], nse_json_df)
-                display_option_chain(df_w, access_token, "Weekly")
-            show_weekly()
+            df_w = process_bhavcopy(FILES['Weekly'], nse_json_df)
+            display_option_chain(df_w, access_token, "Weekly")
         else:
             st.info("Please upload a Weekly Bhavcopy in the sidebar to view data.")
 
     with tab3:
         st.header("Intraday Options")
         if os.path.exists(FILES['Intraday']):
-            @st.fragment(run_every=run_every)
-            def show_intraday():
-                df_i = process_bhavcopy(FILES['Intraday'], nse_json_df)
-                display_option_chain(df_i, access_token, "Intraday")
-            show_intraday()
+            df_i = process_bhavcopy(FILES['Intraday'], nse_json_df)
+            display_option_chain(df_i, access_token, "Intraday")
         else:
             st.info("Please upload an Intraday Bhavcopy in the sidebar to view data.")
 
 else:
     st.error("Critical Error: NSE.json could not be loaded.")
+
+# Auto-Refresh Logic
+if auto_refresh:
+    time.sleep(refresh_interval)
+    st.rerun()

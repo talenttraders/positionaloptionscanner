@@ -1,24 +1,6 @@
-# Python
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
-.Python
-env/
+.DS_Store
+data/token.json
 venv/
 .env
-
-# Data
-data/
-NSE.json
-*.csv
-*.gz
-*.zip
-
-# IDE
-.vscode/
-.idea/
-
-# OS
-.DS_Store
-Thumbs.db
