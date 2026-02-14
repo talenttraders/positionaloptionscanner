@@ -8,6 +8,7 @@ import gzip
 import shutil
 from datetime import datetime, timedelta, timezone
 import concurrent.futures
+import zipfile
 
 # IST Offset
 IST_OFFSET = timedelta(hours=5, minutes=30)
@@ -149,6 +150,24 @@ def extract_date_from_filename(filename):
         # Format as YYYY-MM-DD
         return f"{d[:4]}-{d[4:6]}-{d[6:]}"
     return None
+
+def extract_csv_from_zip(zip_file):
+    try:
+        # zip_file is a UploadedFile object from streamlit
+        with zipfile.ZipFile(zip_file) as z:
+            # Find the first CSV file in the ZIP
+            csv_files = [f for f in z.namelist() if f.lower().endswith('.csv')]
+            if not csv_files:
+                st.error("No CSV file found in the ZIP archive.")
+                return None, None
+            
+            # Extract the first CSV found
+            csv_filename = csv_files[0]
+            with z.open(csv_filename) as f:
+                return f.read(), csv_filename
+    except Exception as e:
+        st.error(f"Error extracting ZIP file: {e}")
+        return None, None
 
 def load_token():
     if os.path.exists(TOKEN_FILE):
@@ -498,105 +517,131 @@ def display_option_chain(df, access_token, key_suffix):
             height=1800
         )
 
-# --- Sidebar ---
-with st.sidebar:
-    st.header("Configuration")
-    
-    # Persistent Token Logic
-    saved_token = load_token()
-    access_token = st.text_input("Upstox Access Token", value=saved_token, type="password")
-    
-    if access_token and access_token != saved_token:
-        save_token(access_token)
-    
-    st.markdown("---")
-    st.header("Data Management")
-    
-    # NSE JSON Uploader
-    st.subheader("NSE Instrument JSON")
-    
-    if st.button("🔄 Download Latest"):
-        try:
-            with st.spinner("Downloading latest NSE.json from Upstox..."):
-                url = "https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz"
-                headers = {
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-                }
-                response = requests.get(url, headers=headers, stream=True)
-                if response.status_code == 200:
-                    with open(NSE_JSON_PATH, "wb") as f_out:
-                        with gzip.GzipFile(fileobj=response.raw) as f_in:
-                            shutil.copyfileobj(f_in, f_out)
-                    st.cache_data.clear()
-                    st.success("Updated successfully!")
-                    time.sleep(1)
-                    st.rerun()
-                else:
-                    st.error(f"Failed to download. Status: {response.status_code}")
-        except Exception as e:
-            st.error(f"Error: {e}")
+# --- Configuration Logic (Before Sidebar) ---
+# Check if we should enter "Client View" (No Sidebar, Token from Secrets)
+# To see the sidebar (Admin View), remove or comment out UPSTOX_ACCESS_TOKEN in .streamlit/secrets.toml
+is_client_view = "UPSTOX_ACCESS_TOKEN" in st.secrets and st.secrets["UPSTOX_ACCESS_TOKEN"].strip() != ""
 
+if is_client_view:
+    # CLIENT VIEW DEFAULTS
+    access_token = st.secrets["UPSTOX_ACCESS_TOKEN"]
+    # Hide sidebar completely for clients
+    st.markdown("""
+    <style>
+        [data-testid="stSidebar"] {display: none;}
+    </style>
+    """, unsafe_allow_html=True)
     
-    # Monthly Uploader
-    st.subheader("Monthly")
-    up_m = st.file_uploader("Upload Monthly Bhavcopy", type=['csv'], key='m_up')
-    if up_m is not None:
-        with open(FILES['Monthly'], "wb") as f:
-            f.write(up_m.getbuffer())
-        # Extract and save date
-        date_str = extract_date_from_filename(up_m.name)
-        if date_str:
-            save_meta('Monthly', date_str)
-        st.success("Monthly file updated!")
+    # Default refresh settings for clients
+    auto_refresh = True
+    refresh_interval = 15
     
-    meta = load_meta()
-    if 'Monthly' in meta and os.path.exists(FILES['Monthly']):
-        st.caption(f"📅 Data Date: {meta['Monthly']}")
-    elif os.path.exists(FILES['Monthly']):
-        # Fallback to file time if no meta date
-        m_time = os.path.getmtime(FILES['Monthly'])
-        st.caption(f"📅 Last Updated: {datetime.fromtimestamp(m_time).strftime('%Y-%m-%d %H:%M')}")
-    
-    # Weekly Uploader
-    st.subheader("Weekly")
-    up_w = st.file_uploader("Upload Weekly Bhavcopy", type=['csv'], key='w_up')
-    if up_w is not None:
-        with open(FILES['Weekly'], "wb") as f:
-            f.write(up_w.getbuffer())
-        # Extract and save date
-        date_str = extract_date_from_filename(up_w.name)
-        if date_str:
-            save_meta('Weekly', date_str)
-        st.success("Weekly file updated!")
-
-    if 'Weekly' in meta and os.path.exists(FILES['Weekly']):
-        st.caption(f"📅 Data Date: {meta['Weekly']}")
-    elif os.path.exists(FILES['Weekly']):
-        w_time = os.path.getmtime(FILES['Weekly'])
-        st.caption(f"📅 Last Updated: {datetime.fromtimestamp(w_time).strftime('%Y-%m-%d %H:%M')}")
-    
-    # Intraday Uploader
-    st.subheader("Intraday")
-    up_i = st.file_uploader("Upload Intraday Bhavcopy", type=['csv'], key='i_up')
-    if up_i is not None:
-        with open(FILES['Intraday'], "wb") as f:
-            f.write(up_i.getbuffer())
-        # Extract and save date
-        date_str = extract_date_from_filename(up_i.name)
-        if date_str:
-            save_meta('Intraday', date_str)
-        st.success("Intraday file updated!")
-    
-    if 'Intraday' in meta and os.path.exists(FILES['Intraday']):
-        st.caption(f"📅 Data Date: {meta['Intraday']}")
-    elif os.path.exists(FILES['Intraday']):
-        i_time = os.path.getmtime(FILES['Intraday'])
-        st.caption(f"📅 Last Updated: {datetime.fromtimestamp(i_time).strftime('%Y-%m-%d %H:%M')}")
+else:
+    # ADMIN VIEW (Show Sidebar)
+    with st.sidebar:
+        st.header("Configuration")
         
-    st.markdown("---")
-    st.header("Auto Refresh")
-    auto_refresh = st.checkbox("Enable Auto-Refresh", value=False)
-    refresh_interval = st.slider("Refresh Interval (seconds)", min_value=5, max_value=60, value=15)
+        # Local Token Logic
+        saved_token = load_token()
+        access_token = st.text_input("Upstox Access Token", value=saved_token, type="password")
+        
+        if access_token and access_token != saved_token:
+            save_token(access_token)
+    
+        st.markdown("---")
+        st.header("Data Management")
+        
+        # NSE JSON Uploader
+        st.subheader("NSE Instrument JSON")
+        
+        if st.button("🔄 Download Latest"):
+            try:
+                with st.spinner("Downloading latest NSE.json from Upstox..."):
+                    url = "https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz"
+                    headers = {
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+                    }
+                    response = requests.get(url, headers=headers, stream=True)
+                    if response.status_code == 200:
+                        with open(NSE_JSON_PATH, "wb") as f_out:
+                            with gzip.GzipFile(fileobj=response.raw) as f_in:
+                                shutil.copyfileobj(f_in, f_out)
+                        st.cache_data.clear()
+                        st.success("Updated successfully!")
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error(f"Failed to download. Status: {response.status_code}")
+            except Exception as e:
+                st.error(f"Error: {e}")
+
+        
+        # Monthly Uploader
+        st.subheader("Monthly")
+        up_m = st.file_uploader("Upload Monthly Bhavcopy", type=['zip'], key='m_up')
+        if up_m is not None:
+            csv_content, csv_name = extract_csv_from_zip(up_m)
+            if csv_content:
+                with open(FILES['Monthly'], "wb") as f:
+                    f.write(csv_content)
+                # Extract and save date from the CSV filename within the ZIP
+                date_str = extract_date_from_filename(csv_name)
+                if date_str:
+                    save_meta('Monthly', date_str)
+                st.success(f"Monthly file updated from {csv_name}!")
+        
+        meta = load_meta()
+        if 'Monthly' in meta and os.path.exists(FILES['Monthly']):
+            st.caption(f"📅 Data Date: {meta['Monthly']}")
+        elif os.path.exists(FILES['Monthly']):
+            # Fallback to file time if no meta date
+            m_time = os.path.getmtime(FILES['Monthly'])
+            st.caption(f"📅 Last Updated: {datetime.fromtimestamp(m_time).strftime('%Y-%m-%d %H:%M')}")
+        
+        # Weekly Uploader
+        st.subheader("Weekly")
+        up_w = st.file_uploader("Upload Weekly Bhavcopy", type=['zip'], key='w_up')
+        if up_w is not None:
+            csv_content, csv_name = extract_csv_from_zip(up_w)
+            if csv_content:
+                with open(FILES['Weekly'], "wb") as f:
+                    f.write(csv_content)
+                # Extract and save date
+                date_str = extract_date_from_filename(csv_name)
+                if date_str:
+                    save_meta('Weekly', date_str)
+                st.success(f"Weekly file updated from {csv_name}!")
+
+        if 'Weekly' in meta and os.path.exists(FILES['Weekly']):
+            st.caption(f"📅 Data Date: {meta['Weekly']}")
+        elif os.path.exists(FILES['Weekly']):
+            w_time = os.path.getmtime(FILES['Weekly'])
+            st.caption(f"📅 Last Updated: {datetime.fromtimestamp(w_time).strftime('%Y-%m-%d %H:%M')}")
+        
+        # Intraday Uploader
+        st.subheader("Intraday")
+        up_i = st.file_uploader("Upload Intraday Bhavcopy", type=['zip'], key='i_up')
+        if up_i is not None:
+            csv_content, csv_name = extract_csv_from_zip(up_i)
+            if csv_content:
+                with open(FILES['Intraday'], "wb") as f:
+                    f.write(csv_content)
+                # Extract and save date
+                date_str = extract_date_from_filename(csv_name)
+                if date_str:
+                    save_meta('Intraday', date_str)
+                st.success(f"Intraday file updated from {csv_name}!")
+        
+        if 'Intraday' in meta and os.path.exists(FILES['Intraday']):
+            st.caption(f"📅 Data Date: {meta['Intraday']}")
+        elif os.path.exists(FILES['Intraday']):
+            i_time = os.path.getmtime(FILES['Intraday'])
+            st.caption(f"📅 Last Updated: {datetime.fromtimestamp(i_time).strftime('%Y-%m-%d %H:%M')}")
+            
+        st.markdown("---")
+        st.header("Auto Refresh")
+        auto_refresh = st.checkbox("Enable Auto-Refresh", value=False)
+        refresh_interval = st.slider("Refresh Interval (seconds)", min_value=5, max_value=60, value=15)
 
 # --- Main Page ---
 st.title("Positional Stock Option Scanner")

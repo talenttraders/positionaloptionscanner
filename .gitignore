@@ -8,10 +8,13 @@ env/
 venv/
 .env
 
+# Streamlit Secrets
+.streamlit/secrets.toml
+
 # Data
-data/
-NSE.json
-*.csv
+# data/
+# NSE.json
+# *.csv
 *.gz
 *.zip
 
