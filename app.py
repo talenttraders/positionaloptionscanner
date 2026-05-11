@@ -266,6 +266,10 @@ def process_bhavcopy(bhav_file, df_json, target_expiry_index=0):
         # Identify unique expiry dates available in the bhavcopy
         available_expiries = sorted(futures['XpryDt'].unique())
         
+        if not available_expiries:
+            st.warning("No future expiry dates found in the uploaded file.")
+            return pd.DataFrame(), None, []
+
         # Select target expiry based on index (0 for Near, 1 for Next)
         if target_expiry_index >= len(available_expiries):
             # Fallback to the latest available if index is out of range
@@ -284,7 +288,7 @@ def process_bhavcopy(bhav_file, df_json, target_expiry_index=0):
         options = df_bhav[df_bhav['OptnTp'].isin(['CE', 'PE'])].copy()
         if options.empty:
             st.warning("No Options data found in uploaded file.")
-            return pd.DataFrame()
+            return pd.DataFrame(), target_expiry, available_expiries
 
         options['XpryDt'] = pd.to_datetime(options['XpryDt'])
 
@@ -316,6 +320,9 @@ def process_bhavcopy(bhav_file, df_json, target_expiry_index=0):
             how='inner'
         )
 
+        if result.empty and not atm_rows.empty:
+            st.error("Data mismatch: Found options in Bhavcopy but couldn't find them in NSE.json. Please update NSE.json via the sidebar.")
+
         final_df = result[[
             'TckrSymb', 'XpryDt', 'StrkPric', 'OptnTp', 
             'FuturePrice', 'ClsPric', 'instrument_key',
@@ -341,11 +348,11 @@ def process_bhavcopy(bhav_file, df_json, target_expiry_index=0):
         if 'Trigger' in final_df.columns:
             final_df['Trigger'] = final_df['Trigger'] * 2
             
-        return final_df
+        return final_df, target_expiry, available_expiries
 
     except Exception as e:
         st.error(f"Error processing file: {e}")
-        return pd.DataFrame()
+        return pd.DataFrame(), None, []
 
 def fetch_ltp(instrument_keys, token):
     if not token:
@@ -694,33 +701,40 @@ if not nse_json_df.empty:
         if os.path.exists(FILES['Monthly']):
             @st.fragment(run_every=run_every)
             def show_monthly():
-                df_m = process_bhavcopy(FILES['Monthly'], nse_json_df, target_expiry_index=target_expiry_idx)
+                df_m, target_exp, all_exps = process_bhavcopy(FILES['Monthly'], nse_json_df, target_expiry_index=target_expiry_idx)
+                if target_exp:
+                    st.info(f"📅 Displaying Expiry: **{target_exp.strftime('%d-%b-%Y')}**")
                 display_option_chain(df_m, access_token, "Monthly")
             show_monthly()
         else:
-            st.info("Please upload a Monthly Bhavcopy in the sidebar to view data.")
+            st.warning("Monthly Bhavcopy file not found. Please upload in the sidebar.")
 
     with tab2:
         st.header(f"Weekly Options ({expiry_type if not is_client_view else 'Current Month'})")
         if os.path.exists(FILES['Weekly']):
             @st.fragment(run_every=run_every)
             def show_weekly():
-                df_w = process_bhavcopy(FILES['Weekly'], nse_json_df, target_expiry_index=target_expiry_idx)
+                df_w, target_exp, all_exps = process_bhavcopy(FILES['Weekly'], nse_json_df, target_expiry_index=target_expiry_idx)
+                if target_exp:
+                    st.info(f"📅 Displaying Expiry: **{target_exp.strftime('%d-%b-%Y')}**")
                 display_option_chain(df_w, access_token, "Weekly")
             show_weekly()
         else:
-            st.info("Please upload a Weekly Bhavcopy in the sidebar to view data.")
+            st.warning("Weekly Bhavcopy file not found. Please upload in the sidebar.")
 
     with tab3:
-        st.header(f"Intraday Options ({expiry_type if not is_client_view else 'Current Month'})")
+        st.header("Intraday Options")
         if os.path.exists(FILES['Intraday']):
             @st.fragment(run_every=run_every)
             def show_intraday():
-                df_i = process_bhavcopy(FILES['Intraday'], nse_json_df, target_expiry_index=target_expiry_idx)
+                # For Intraday, we usually always look at the nearest (0)
+                df_i, target_exp, all_exps = process_bhavcopy(FILES['Intraday'], nse_json_df, target_expiry_index=0)
+                if target_exp:
+                    st.info(f"📅 Displaying Expiry: **{target_exp.strftime('%d-%b-%Y')}**")
                 display_option_chain(df_i, access_token, "Intraday")
             show_intraday()
         else:
-            st.info("Please upload an Intraday Bhavcopy in the sidebar to view data.")
+            st.warning("Intraday Bhavcopy file not found. Please upload in the sidebar.")
 
 else:
     st.error("Critical Error: NSE.json could not be loaded.")
