@@ -424,12 +424,20 @@ def display_option_chain(df, access_token, key_suffix):
         # Identify missing keys
         missing_keys = [k for k in all_keys if k not in ltp_cache]
         
+        # Check if user requested a manual refresh
+        force_refresh = st.session_state.get('force_refresh_ltp', False)
+        
         should_fetch = False
         fetch_reason = ""
         
         if is_market_hours:
             should_fetch = True
             fetch_reason = "Live Market Update"
+        elif force_refresh:
+            should_fetch = True
+            fetch_reason = "Manual Refresh"
+            # Reset the flag after planning to fetch
+            st.session_state['force_refresh_ltp'] = False
         elif missing_keys:
             should_fetch = True
             fetch_reason = "Populating Missing Data"
@@ -593,6 +601,11 @@ else:
         st.markdown("---")
         st.header("Data Management")
         
+        # LTP Force Refresh
+        if st.button("⚡ Refresh LTP Now", use_container_width=True):
+            st.session_state['force_refresh_ltp'] = True
+            st.rerun()
+
         # NSE JSON Uploader
         st.subheader("NSE Instrument JSON")
         
