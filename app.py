@@ -216,20 +216,15 @@ def save_blacklist(keys):
 # Constant for NSE JSON
 NSE_JSON_PATH = 'NSE.json'
 
-@st.cache_resource(ttl=3600)
+@st.cache_data
 def load_nse_json():
     if os.path.exists(NSE_JSON_PATH):
         try:
             df = pd.read_json(NSE_JSON_PATH)
             # Pre-process JSON
             if 'segment' in df.columns:
-                df = df[df['segment'] == 'NSE_FO'].copy()
+                df = df[df['segment'] == 'NSE_FO']
             df['expiry_dt'] = pd.to_datetime(df['expiry'], unit='ms').dt.normalize()
-            # Optimize memory usage by downcasting numeric columns
-            for col in df.select_dtypes(include=['int64']).columns:
-                df[col] = pd.to_numeric(df[col], downcast='integer')
-            for col in df.select_dtypes(include=['float64']).columns:
-                df[col] = pd.to_numeric(df[col], downcast='float')
             return df
         except Exception as e:
             st.error(f"Error loading NSE.json: {e}")
@@ -393,7 +388,7 @@ def fetch_ltp(instrument_keys, token):
             pass
         return {}
     
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
         futures = [executor.submit(fetch_batch, batch) for batch in batches]
         for future in concurrent.futures.as_completed(futures):
             try:
@@ -544,7 +539,7 @@ def display_option_chain(df, access_token, key_suffix):
             .format(format_dict)
             .set_properties(**{'font-weight': '600', 'text-align': 'center', 'font-size': '16px'}),
             hide_index=True, 
-            width='stretch',
+            use_container_width=True,
             height=1800
         )
 
@@ -556,7 +551,7 @@ def display_option_chain(df, access_token, key_suffix):
             .format(format_dict)
             .set_properties(**{'font-weight': '600', 'text-align': 'center', 'font-size': '16px'}),
             hide_index=True, 
-            width='stretch',
+            use_container_width=True,
             height=1800
         )
 
@@ -607,7 +602,7 @@ else:
         st.header("Data Management")
         
         # LTP Force Refresh
-        if st.button("⚡ Refresh LTP Now"):
+        if st.button("⚡ Refresh LTP Now", use_container_width=True):
             st.session_state['force_refresh_ltp'] = True
             st.rerun()
 
@@ -626,7 +621,7 @@ else:
                         with open(NSE_JSON_PATH, "wb") as f_out:
                             with gzip.GzipFile(fileobj=response.raw) as f_in:
                                 shutil.copyfileobj(f_in, f_out)
-                        st.cache_resource.clear()
+                        st.cache_data.clear()
                         st.success("Updated successfully!")
                         time.sleep(1)
                         st.rerun()
