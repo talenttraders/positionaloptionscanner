@@ -216,15 +216,20 @@ def save_blacklist(keys):
 # Constant for NSE JSON
 NSE_JSON_PATH = 'NSE.json'
 
-@st.cache_resource
+@st.cache_resource(ttl=3600)
 def load_nse_json():
     if os.path.exists(NSE_JSON_PATH):
         try:
             df = pd.read_json(NSE_JSON_PATH)
             # Pre-process JSON
             if 'segment' in df.columns:
-                df = df[df['segment'] == 'NSE_FO']
+                df = df[df['segment'] == 'NSE_FO'].copy()
             df['expiry_dt'] = pd.to_datetime(df['expiry'], unit='ms').dt.normalize()
+            # Optimize memory usage by downcasting numeric columns
+            for col in df.select_dtypes(include=['int64']).columns:
+                df[col] = pd.to_numeric(df[col], downcast='integer')
+            for col in df.select_dtypes(include=['float64']).columns:
+                df[col] = pd.to_numeric(df[col], downcast='float')
             return df
         except Exception as e:
             st.error(f"Error loading NSE.json: {e}")
