@@ -710,7 +710,7 @@ if not nse_json_df.empty:
     run_every = refresh_interval if auto_refresh else None
 
     with tab1:
-        st.header(f"Monthly Options ({expiry_type if not is_client_view else 'Current Month'})")
+        st.header(f"Monthly Options (Current Month)")
         if os.path.exists(FILES['Monthly']):
             @st.fragment(run_every=run_every)
             def show_monthly():
@@ -723,7 +723,7 @@ if not nse_json_df.empty:
             st.warning("Monthly Bhavcopy file not found. Please upload in the sidebar.")
 
     with tab2:
-        st.header(f"Weekly Options ({expiry_type if not is_client_view else 'Current Month'})")
+        st.header(f"Weekly Options (Current Month)")
         if os.path.exists(FILES['Weekly']):
             @st.fragment(run_every=run_every)
             def show_weekly():
