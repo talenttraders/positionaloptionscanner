@@ -216,7 +216,7 @@ def save_blacklist(keys):
 # Constant for NSE JSON
 NSE_JSON_PATH = 'NSE.json'
 
-@st.cache_data
+@st.cache_resource
 def load_nse_json():
     if os.path.exists(NSE_JSON_PATH):
         try:
@@ -621,7 +621,7 @@ else:
                         with open(NSE_JSON_PATH, "wb") as f_out:
                             with gzip.GzipFile(fileobj=response.raw) as f_in:
                                 shutil.copyfileobj(f_in, f_out)
-                        st.cache_data.clear()
+                        st.cache_resource.clear()
                         st.success("Updated successfully!")
                         time.sleep(1)
                         st.rerun()
