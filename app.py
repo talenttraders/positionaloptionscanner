@@ -393,7 +393,7 @@ def fetch_ltp(instrument_keys, token):
             pass
         return {}
     
-    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
         futures = [executor.submit(fetch_batch, batch) for batch in batches]
         for future in concurrent.futures.as_completed(futures):
             try:
@@ -544,7 +544,7 @@ def display_option_chain(df, access_token, key_suffix):
             .format(format_dict)
             .set_properties(**{'font-weight': '600', 'text-align': 'center', 'font-size': '16px'}),
             hide_index=True, 
-            use_container_width=True,
+            width='stretch',
             height=1800
         )
 
@@ -556,7 +556,7 @@ def display_option_chain(df, access_token, key_suffix):
             .format(format_dict)
             .set_properties(**{'font-weight': '600', 'text-align': 'center', 'font-size': '16px'}),
             hide_index=True, 
-            use_container_width=True,
+            width='stretch',
             height=1800
         )
 
@@ -607,7 +607,7 @@ else:
         st.header("Data Management")
         
         # LTP Force Refresh
-        if st.button("⚡ Refresh LTP Now", use_container_width=True):
+        if st.button("⚡ Refresh LTP Now"):
             st.session_state['force_refresh_ltp'] = True
             st.rerun()
 
